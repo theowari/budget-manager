@@ -134,10 +134,14 @@ export function CardsPage() {
                                   parcela {item.installment_no}/{item.installments}
                                 </Badge>
                               )}
+                              {item.subscription_id !== null && <Badge tone="slate">assinatura</Badge>}
                             </p>
                           </div>
                           <Amount text={brl(item.amount_cents)} tone="expense" />
-                          <ConfirmButton label={item.installments > 1 ? 'Excluir compra' : 'Excluir'} onConfirm={() => removePurchase.mutate(item.purchase_id)} />
+                          <ConfirmButton
+                            label={item.installments > 1 ? 'Excluir compra' : item.subscription_id !== null ? 'Excluir cobrança' : 'Excluir'}
+                            onConfirm={() => removePurchase.mutate(item.purchase_id)}
+                          />
                         </li>
                       ))}
                     </ul>

@@ -28,8 +28,9 @@ Variáveis opcionais: `PORT` (padrão 3001) e `FINANCEIRO_DB` (caminho do arquiv
 1. **Cadastros → Contas:** edite a “Conta principal” e informe o saldo inicial.
 2. **Cartões:** cadastre cada cartão com limite, dia de fechamento e dia de vencimento.
 3. **Lançamentos:** registre gastos e receitas. Em “Pago com” escolha uma conta ou um cartão (e as parcelas).
-4. **Cadastros → Recorrências:** salário, aluguel, assinaturas. Alimentam a projeção.
-5. **Orçamento** e **Caixinhas:** defina limites por categoria e objetivos de economia.
+4. **Cadastros → Recorrências:** salário, aluguel e outros valores fixos na conta. Alimentam a projeção.
+5. **Assinaturas:** Spotify, YouTube Premium, Discord… serviços cobrados todo mês no cartão, sem número de parcelas.
+6. **Orçamento** e **Caixinhas:** defina limites por categoria e objetivos de economia.
 
 ## Como os números são calculados
 
@@ -38,7 +39,8 @@ Variáveis opcionais: `PORT` (padrão 3001) e `FINANCEIRO_DB` (caminho do arquiv
 - **Fatura do cartão:** compra até o dia de fechamento (inclusive) cai na fatura do mês; depois, na seguinte. A parcela *n* cai *n−1* meses depois. Pagar a fatura sai da conta, mas **não** conta como novo gasto: o gasto já foi contado na compra.
 - **Gasto por categoria (orçamento e resumo):** cada parcela de cartão conta no mês da própria parcela.
 - **Limite usado** = tudo que ainda falta pagar nas faturas, incluindo parcelas futuras.
-- **Projeção:** parte do saldo de hoje e soma recorrências e faturas pendentes (no mês do vencimento). Não inclui gastos variáveis ainda não lançados.
+- **Assinaturas:** no dia da cobrança, cada assinatura vira uma compra à vista na fatura do cartão (e entra no limite, no orçamento e nos lançamentos). Não há número de parcelas: cobra todo mês até você **cancelar**. Cancelar mantém o histórico e pode ser desfeito com **Reativar**, sem cobrar os meses parados. Editar o valor (reajuste) vale só para as próximas cobranças.
+- **Projeção:** parte do saldo de hoje e soma recorrências, faturas pendentes (no mês do vencimento) e as próximas cobranças das assinaturas. Não inclui gastos variáveis ainda não lançados.
 
 ## Desenvolvimento
 

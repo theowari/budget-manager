@@ -88,7 +88,7 @@ export function cardsRouter(db: Db, today: () => ISODate): Router {
       if (!changes) throw notFound('Cartão');
     } catch (err) {
       if (err instanceof Error && /FOREIGN KEY/i.test(err.message)) {
-        throw new HttpError(409, 'Este cartão já tem compras ou pagamentos e não pode ser removido.');
+        throw new HttpError(409, 'Este cartão já tem compras, assinaturas ou pagamentos e não pode ser removido.');
       }
       throw err;
     }
@@ -104,7 +104,8 @@ export function cardsRouter(db: Db, today: () => ISODate): Router {
       db,
       `SELECT ch.id AS charge_id, p.id AS purchase_id, p.description, p.purchase_date,
               ch.installment_no, p.installments, ch.amount_cents,
-              c.id AS category_id, c.name AS category_name, c.color AS category_color
+              c.id AS category_id, c.name AS category_name, c.color AS category_color,
+              p.subscription_id
          FROM card_charges ch
          JOIN card_purchases p ON p.id = ch.purchase_id
          JOIN categories c     ON c.id = p.category_id

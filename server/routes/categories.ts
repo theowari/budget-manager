@@ -60,7 +60,7 @@ export function categoriesRouter(db: Db): Router {
       if (!changes) throw notFound('Categoria');
     } catch (err) {
       if (err instanceof Error && /FOREIGN KEY/i.test(err.message)) {
-        throw new HttpError(409, 'Esta categoria já tem lançamentos e não pode ser removida.');
+        throw new HttpError(409, 'Esta categoria já tem lançamentos, recorrências ou assinaturas e não pode ser removida.');
       }
       throw err;
     }

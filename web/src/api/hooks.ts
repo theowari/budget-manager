@@ -12,6 +12,7 @@ import type {
   Kind,
   Projection,
   RecurringRuleRow,
+  Subscription,
 } from '../../../shared/types';
 import type { Month } from '../../../shared/dates';
 import { api, qs } from './client';
@@ -36,6 +37,9 @@ export const useGoalMovements = (goalId: number, enabled: boolean) =>
 
 export const useRecurring = () =>
   useQuery({ queryKey: ['recurring'], queryFn: () => api.get<RecurringRuleRow[]>('/recurring') });
+
+export const useSubscriptions = () =>
+  useQuery({ queryKey: ['subscriptions'], queryFn: () => api.get<Subscription[]>('/subscriptions') });
 
 export const useDashboard = (month: Month) =>
   useQuery({ queryKey: ['dashboard', month], queryFn: () => api.get<Dashboard>(`/dashboard${qs({ month })}`) });

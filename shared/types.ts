@@ -41,6 +41,8 @@ export interface Entry {
   invoice_month: Month | null;
   month: Month;
   recurring_id: number | null;
+  /** Preenchido quando a parcela é a cobrança mensal de uma assinatura. */
+  subscription_id: number | null;
 }
 
 export interface Card {
@@ -67,6 +69,7 @@ export interface InvoiceItem {
   category_id: number;
   category_name: string;
   category_color: string;
+  subscription_id: number | null;
 }
 
 export interface InvoicePayment {
@@ -155,6 +158,25 @@ export interface RecurringRuleRow {
   day_of_month: number;
   start_month: Month;
   end_month: Month | null;
+}
+
+/** Assinatura: cobrança mensal no cartão, sem número de parcelas, até ser cancelada. */
+export interface Subscription {
+  id: number;
+  name: string;
+  card_id: number;
+  card_name: string;
+  card_color: string;
+  category_id: number;
+  category_name: string;
+  category_color: string;
+  amount_cents: number;
+  day_of_month: number;
+  start_month: Month;
+  /** Último mês cobrado; null = continua até ser cancelada. */
+  end_month: Month | null;
+  /** Próxima cobrança; null quando a assinatura já está encerrada. */
+  next_charge_date: ISODate | null;
 }
 
 export interface ProjectionMonth {

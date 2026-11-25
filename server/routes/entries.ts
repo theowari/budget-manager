@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { all, get, run, transaction, type Db } from '../db';
-import { buildCharges } from '../domain/cards';
 import { HttpError, idParam, notFound, zCents, zDate, zMonth, zRef } from '../http';
+import { insertCardPurchase } from '../purchases';
 import { assertCategory } from './categories';
 
 const description = z.string().trim().max(200).default('');
@@ -45,7 +45,7 @@ const ENTRIES_SQL = `
          t.account_id, a.name AS account_name,
          NULL AS card_id, NULL AS card_name,
          NULL AS installment_no, NULL AS installments, NULL AS invoice_month,
-         substr(t.date, 1, 7) AS month, t.recurring_id
+         substr(t.date, 1, 7) AS month, t.recurring_id, NULL AS subscription_id
     FROM transactions t
     JOIN categories c ON c.id = t.category_id
     JOIN accounts a   ON a.id = t.account_id
@@ -55,7 +55,7 @@ const ENTRIES_SQL = `
          NULL, NULL,
          p.card_id, cd.name,
          ch.installment_no, p.installments, ch.invoice_month,
-         ch.competence_month, NULL
+         ch.competence_month, NULL, p.subscription_id
     FROM card_charges ch
     JOIN card_purchases p ON p.id = ch.purchase_id
     JOIN categories c     ON c.id = p.category_id
@@ -103,24 +103,19 @@ export function entriesRouter(db: Db): Router {
     assertCategory(db, b.category_id, 'expense');
     const card = get<{ id: number; closing_day: number }>(db, 'SELECT id, closing_day FROM cards WHERE id = ?', b.card_id);
     if (!card) throw new HttpError(400, 'Cartão não encontrado');
-    const charges = buildCharges(b.total_cents, b.installments, b.date, card.closing_day);
 
-    const purchaseId = transaction(db, () => {
-      const { id } = run(
-        db,
-        'INSERT INTO card_purchases (card_id, category_id, description, total_cents, installments, purchase_date) VALUES (?, ?, ?, ?, ?, ?)',
-        b.card_id, b.category_id, b.description, b.total_cents, b.installments, b.date,
-      );
-      for (const c of charges) {
-        run(
-          db,
-          'INSERT INTO card_charges (purchase_id, card_id, installment_no, amount_cents, invoice_month, competence_month) VALUES (?, ?, ?, ?, ?, ?)',
-          id, b.card_id, c.installment_no, c.amount_cents, c.invoice_month, c.competence_month,
-        );
-      }
-      return id;
-    });
-    res.status(201).json({ kind: 'card_purchase', id: purchaseId, installments: charges });
+    const purchase = transaction(db, () =>
+      insertCardPurchase(db, {
+        card_id: b.card_id,
+        closing_day: card.closing_day,
+        category_id: b.category_id,
+        description: b.description,
+        total_cents: b.total_cents,
+        installments: b.installments,
+        purchase_date: b.date,
+      }),
+    );
+    res.status(201).json({ kind: 'card_purchase', id: purchase.id, installments: purchase.charges });
   });
 
   r.put('/transactions/:id', (req, res) => {

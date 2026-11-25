@@ -372,3 +372,271 @@ describe('recorrências e projeção', () => {
     expect(body.lowest_balance_cents).toBe(-300_00);
   });
 });
+
+// ---- assinaturas -------------------------------------------------------------------
+
+describe('assinaturas', () => {
+  // "hoje" mutável: simula a passagem do tempo sem recriar o banco
+  let now: string;
+  beforeEach(() => {
+    now = TODAY; // 2026-11-24
+    api = request(createApp(openDb(':memory:'), { today: () => now }));
+  });
+
+  type Sub = { id: number; next_charge_date: string | null; end_month: string | null };
+
+  async function subscribe(cardId: number, over: Record<string, unknown> = {}) {
+    return api.post('/api/subscriptions').send({
+      name: 'Spotify',
+      card_id: cardId,
+      category_id: await categoryId('Entretenimento'),
+      amount_cents: 21_90,
+      day_of_month: 10,
+      start_month: '2026-11',
+      ...over,
+    });
+  }
+
+  async function subscribed(cardId: number, over: Record<string, unknown> = {}): Promise<Sub> {
+    const res = await subscribe(cardId, over);
+    expect(res.status).toBe(201);
+    return res.body;
+  }
+
+  /** Cobranças da assinatura lançadas nos lançamentos do mês. */
+  async function chargesIn(month: string, subId: number) {
+    const { body } = await api.get('/api/entries').query({ month });
+    return (body as { subscription_id: number | null; ref_id: number; date: string }[]).filter((e) => e.subscription_id === subId);
+  }
+
+  async function invoice(cardId: number, month: string) {
+    return (await api.get(`/api/cards/${cardId}/invoice`).query({ month })).body;
+  }
+
+  it('lança a cobrança do mês na fatura, à vista, e consome o limite', async () => {
+    const card = await createCard();
+    const sub = await subscribed(card.id); // dia 10 já passou; fecha dia 15 -> fatura de novembro
+
+    const nov = await invoice(card.id, '2026-11');
+    expect(nov.total_cents).toBe(21_90);
+    expect(nov.items).toHaveLength(1);
+    expect(nov.items[0]).toMatchObject({ description: 'Spotify', installment_no: 1, installments: 1, subscription_id: sub.id });
+
+    const { body: cards } = await api.get('/api/cards');
+    expect(cards[0]).toMatchObject({ used_cents: 21_90, available_cents: 1000_00 - 21_90 });
+  });
+
+  it('a cobrança conta no orçamento da categoria e nos lançamentos do mês', async () => {
+    const card = await createCard();
+    const sub = await subscribed(card.id);
+    const entretenimento = await categoryId('Entretenimento');
+
+    const budgets = (await api.get('/api/budgets').query({ month: '2026-11' })).body;
+    expect(budgets.find((b: { category_id: number }) => b.category_id === entretenimento).spent_cents).toBe(21_90);
+
+    const [entry] = await chargesIn('2026-11', sub.id);
+    expect(entry).toMatchObject({ kind: 'card_charge', date: '2026-11-10', amount_cents: 21_90, card_name: 'Nubank' });
+  });
+
+  it('só cobra quando o dia chega, e cai na fatura certa pelo fechamento do cartão', async () => {
+    const card = await createCard(); // fecha dia 15
+    const sub = await subscribed(card.id, { day_of_month: 28 });
+    expect(sub.next_charge_date).toBe('2026-11-28');
+    expect(await chargesIn('2026-11', sub.id)).toHaveLength(0);
+
+    now = '2026-11-28';
+    expect(await chargesIn('2026-11', sub.id)).toHaveLength(1);
+    // dia 28 > fechamento 15: a cobrança vai para a fatura de dezembro
+    expect((await invoice(card.id, '2026-11')).total_cents).toBe(0);
+    expect((await invoice(card.id, '2026-12')).total_cents).toBe(21_90);
+  });
+
+  it('não tem fim: cobra todo mês, sem parcelas, até cancelar', async () => {
+    const card = await createCard({ limit_cents: 5000_00 });
+    const sub = await subscribed(card.id, { start_month: '2026-09' });
+    // setembro, outubro e novembro já venceram
+    expect((await invoice(card.id, '2026-09')).total_cents).toBe(21_90);
+    expect((await invoice(card.id, '2026-10')).total_cents).toBe(21_90);
+    expect((await invoice(card.id, '2026-11')).total_cents).toBe(21_90);
+    expect((await invoice(card.id, '2026-12')).total_cents).toBe(0);
+
+    // mais de um ano depois, continua cobrando
+    now = '2028-02-10';
+    expect((await invoice(card.id, '2027-06')).total_cents).toBe(21_90);
+    expect((await invoice(card.id, '2028-02')).total_cents).toBe(21_90);
+    const { body: cards } = await api.get('/api/cards');
+    expect(cards[0].used_cents).toBe(18 * 21_90); // set/2026 .. fev/2028
+    expect(sub.end_month).toBeNull();
+  });
+
+  it('lança uma vez só por mês, mesmo com várias requisições', async () => {
+    const card = await createCard();
+    const sub = await subscribed(card.id);
+    for (let i = 0; i < 3; i++) {
+      await api.get('/api/dashboard');
+      await api.get('/api/cards');
+      await api.get('/api/projection');
+    }
+    expect(await chargesIn('2026-11', sub.id)).toHaveLength(1);
+    expect((await invoice(card.id, '2026-11')).total_cents).toBe(21_90);
+  });
+
+  it('não recria uma cobrança que o usuário apagou', async () => {
+    const card = await createCard();
+    const sub = await subscribed(card.id, { start_month: '2026-09' });
+    const [sep] = await chargesIn('2026-09', sub.id);
+    await api.delete(`/api/card-purchases/${sep!.ref_id}`).expect(204);
+
+    await api.get('/api/dashboard');
+    expect(await chargesIn('2026-09', sub.id)).toHaveLength(0);
+    expect(await chargesIn('2026-10', sub.id)).toHaveLength(1);
+  });
+
+  it('dia 31 cai no último dia dos meses curtos', async () => {
+    const card = await createCard();
+    const sub = await subscribed(card.id, { day_of_month: 31, start_month: '2026-02' });
+    const [feb] = await chargesIn('2026-02', sub.id);
+    expect(feb).toMatchObject({ date: '2026-02-28' });
+    const [mar] = await chargesIn('2026-03', sub.id);
+    expect(mar).toMatchObject({ date: '2026-03-31' });
+  });
+
+  it('cancelar não cobra mais, mantém o histórico e mostra como encerrada', async () => {
+    const card = await createCard({ limit_cents: 5000_00 });
+    const sub = await subscribed(card.id, { start_month: '2026-09' });
+
+    const { body: cancelled } = await api.post(`/api/subscriptions/${sub.id}/cancel`).expect(200);
+    expect(cancelled).toMatchObject({ end_month: '2026-11', next_charge_date: null });
+
+    now = '2027-03-10';
+    expect(await chargesIn('2026-11', sub.id)).toHaveLength(1); // histórico preservado
+    for (const m of ['2026-12', '2027-01', '2027-02', '2027-03']) expect(await chargesIn(m, sub.id)).toHaveLength(0);
+    const { body: cards } = await api.get('/api/cards');
+    expect(cards[0].used_cents).toBe(3 * 21_90);
+  });
+
+  it('cancelar antes do dia da cobrança evita a cobrança deste mês', async () => {
+    const card = await createCard();
+    const sub = await subscribed(card.id, { day_of_month: 28, start_month: '2026-09' }); // nov/28 ainda não chegou
+    const { body: cancelled } = await api.post(`/api/subscriptions/${sub.id}/cancel`).expect(200);
+    expect(cancelled).toMatchObject({ end_month: '2026-10', next_charge_date: null });
+
+    now = '2026-11-30';
+    expect(await chargesIn('2026-11', sub.id)).toHaveLength(0);
+    expect(await chargesIn('2026-10', sub.id)).toHaveLength(1);
+  });
+
+  it('reativar volta a cobrar da próxima data, sem cobrar os meses em que ficou cancelada', async () => {
+    const card = await createCard({ limit_cents: 5000_00 });
+    const sub = await subscribed(card.id, { start_month: '2026-09' });
+    await api.post(`/api/subscriptions/${sub.id}/cancel`).expect(200); // última cobrança: nov
+
+    now = '2027-01-20'; // passaram dez e jan (dia 10) com a assinatura cancelada
+    const { body: back } = await api.post(`/api/subscriptions/${sub.id}/reactivate`).expect(200);
+    expect(back).toMatchObject({ end_month: null, next_charge_date: '2027-02-10' });
+    expect(await chargesIn('2026-12', sub.id)).toHaveLength(0);
+    expect(await chargesIn('2027-01', sub.id)).toHaveLength(0);
+
+    now = '2027-02-10';
+    expect(await chargesIn('2027-02', sub.id)).toHaveLength(1);
+  });
+
+  it('editar vale daqui pra frente: reajuste não muda cobranças já lançadas', async () => {
+    const card = await createCard();
+    const sub = await subscribed(card.id);
+    const { body: edited } = await api
+      .put(`/api/subscriptions/${sub.id}`)
+      .send({ name: 'Spotify', card_id: card.id, category_id: await categoryId('Entretenimento'), amount_cents: 29_90, day_of_month: 10, start_month: '2026-11' })
+      .expect(200);
+    expect(edited.amount_cents).toBe(29_90);
+
+    expect((await invoice(card.id, '2026-11')).total_cents).toBe(21_90); // novembro continua igual
+    now = '2026-12-10';
+    expect((await invoice(card.id, '2026-12')).total_cents).toBe(29_90);
+  });
+
+  it('mudar o dia da cobrança no meio do mês não cobra duas vezes', async () => {
+    const card = await createCard();
+    const sub = await subscribed(card.id); // cobrou nov/10
+    await api
+      .put(`/api/subscriptions/${sub.id}`)
+      .send({ name: 'Spotify', card_id: card.id, category_id: await categoryId('Entretenimento'), amount_cents: 21_90, day_of_month: 28, start_month: '2026-11' })
+      .expect(200);
+    now = '2026-11-28';
+    expect(await chargesIn('2026-11', sub.id)).toHaveLength(1);
+    now = '2026-12-28';
+    expect(await chargesIn('2026-12', sub.id)).toHaveLength(1);
+  });
+
+  it('excluir a assinatura para de cobrar e mantém as cobranças já lançadas', async () => {
+    const card = await createCard();
+    const sub = await subscribed(card.id);
+    await api.delete(`/api/subscriptions/${sub.id}`).expect(204);
+    expect((await api.get('/api/subscriptions')).body).toHaveLength(0);
+    expect((await invoice(card.id, '2026-11')).total_cents).toBe(21_90);
+
+    now = '2026-12-10';
+    expect((await invoice(card.id, '2026-12')).total_cents).toBe(0);
+    await api.delete(`/api/subscriptions/${sub.id}`).expect(404);
+  });
+
+  it('a projeção inclui as cobranças futuras, sem contar duas vezes as já lançadas', async () => {
+    await setInitialBalance(1000_00);
+    const card = await createCard({ closing_day: 15, due_day: 22 });
+    await subscribed(card.id, { day_of_month: 10 }); // nov/10 já lançada: fatura de nov venceu dia 22 e está em aberto
+    await subscribed(card.id, { name: 'Discord', day_of_month: 28, amount_cents: 10_00 }); // nov/28 ainda vai acontecer
+
+    const { body } = await api.get('/api/projection').query({ months: 4 }).expect(200);
+    // nov: fatura vencida do Spotify (21,90) é cobrada no mês atual
+    // dez: Spotify dez/10 (21,90) + Discord nov/28 (10,00, fatura de dez)
+    // jan: Spotify jan/10 + Discord dez/28 · fev: idem
+    expect(body.months.map((m: { invoices_cents: number }) => m.invoices_cents)).toEqual([21_90, 31_90, 31_90, 31_90]);
+    expect(body.months.at(-1).balance_cents).toBe(1000_00 - 21_90 - 3 * 31_90);
+  });
+
+  it('a projeção não inclui assinatura cancelada', async () => {
+    const card = await createCard();
+    const sub = await subscribed(card.id, { day_of_month: 28 });
+    await api.post(`/api/subscriptions/${sub.id}/cancel`).expect(200);
+    const { body } = await api.get('/api/projection').query({ months: 4 });
+    expect(body.months.map((m: { invoices_cents: number }) => m.invoices_cents)).toEqual([0, 0, 0, 0]);
+  });
+
+  it('valida os dados', async () => {
+    const card = await createCard();
+    const base = { name: 'X', card_id: card.id, category_id: await categoryId('Entretenimento'), amount_cents: 10_00, day_of_month: 5, start_month: '2026-11' };
+    const post = (over: Record<string, unknown>) => api.post('/api/subscriptions').send({ ...base, ...over });
+
+    expect((await post({ category_id: await categoryId('Salário', 'income') })).status).toBe(400); // categoria de receita
+    expect((await post({ card_id: 999 })).status).toBe(400);
+    expect((await post({ amount_cents: 0 })).status).toBe(400);
+    expect((await post({ day_of_month: 32 })).status).toBe(400);
+    expect((await post({ name: '  ' })).status).toBe(400);
+    expect((await post({ end_month: '2026-10' })).status).toBe(400); // fim antes do início
+    const tooOld = await post({ start_month: '2002-01' });
+    expect(tooOld.status).toBe(400);
+    expect(tooOld.body.error).toMatch(/36 meses/);
+    expect((await api.get('/api/subscriptions')).body).toHaveLength(0);
+  });
+
+  it('cartão e categoria com assinatura não podem ser excluídos (409)', async () => {
+    const card = await createCard();
+    await subscribed(card.id, { start_month: '2027-06' }); // ainda sem nenhuma cobrança lançada
+    const res = await api.delete(`/api/cards/${card.id}`);
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatch(/assinaturas/);
+    await api.delete(`/api/categories/${await categoryId('Entretenimento')}`).expect(409);
+  });
+
+  it('lista com o próximo vencimento de cada assinatura', async () => {
+    const card = await createCard();
+    await subscribed(card.id, { name: 'Spotify', day_of_month: 10 });
+    await subscribed(card.id, { name: 'Discord', day_of_month: 28 });
+    const { body } = await api.get('/api/subscriptions').expect(200);
+    expect(body.map((s: { name: string; next_charge_date: string }) => [s.name, s.next_charge_date])).toEqual([
+      ['Spotify', '2026-12-10'],
+      ['Discord', '2026-11-28'],
+    ]);
+    expect(body[0]).toMatchObject({ card_name: 'Nubank', category_name: 'Entretenimento', amount_cents: 21_90 });
+  });
+});

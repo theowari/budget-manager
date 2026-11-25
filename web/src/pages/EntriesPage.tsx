@@ -111,6 +111,7 @@ export function EntriesPage() {
                     )}
                     {e.kind === 'card_charge' && e.invoice_month && <Badge>fatura {monthShort(e.invoice_month)}</Badge>}
                     {e.recurring_id && <Badge tone="slate">recorrente</Badge>}
+                    {e.subscription_id !== null && <Badge tone="slate">assinatura</Badge>}
                   </p>
                 </div>
                 <Amount text={`${e.type === 'income' ? '+' : '−'} ${brl(e.amount_cents)}`} tone={e.type} />
@@ -128,7 +129,13 @@ export function EntriesPage() {
                     </Button>
                   )}
                   <ConfirmButton
-                    label={e.kind === 'card_charge' && (e.installments ?? 1) > 1 ? 'Excluir compra' : 'Excluir'}
+                    label={
+                      e.kind === 'card_charge' && (e.installments ?? 1) > 1
+                        ? 'Excluir compra'
+                        : e.subscription_id !== null
+                          ? 'Excluir cobrança'
+                          : 'Excluir'
+                    }
                     onConfirm={() => remove.mutate(e)}
                   />
                 </div>

@@ -146,7 +146,7 @@ export function EntryForm({ editing, defaultPayWith, onClose }: Props) {
         </Field>
 
         {isCard && !editing && (
-          <Field label="Parcelas" hint="1 = à vista no cartão">
+          <Field label="Parcelas" hint="1 = à vista no cartão. Serviço cobrado todo mês, sem fim (Spotify, Netflix…)? Cadastre em Assinaturas.">
             <input className={inputCls} type="number" min={1} max={60} value={installments} onChange={(e) => setInstallments(e.target.value)} />
           </Field>
         )}

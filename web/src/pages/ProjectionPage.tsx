@@ -13,7 +13,7 @@ export function ProjectionPage() {
     <>
       <PageHeader
         title="Projeção de saldo"
-        subtitle="Estimativa do saldo das suas contas mês a mês, com base no que já está cadastrado: recorrências (salário, aluguel…) e faturas de cartão, incluindo parcelas futuras."
+        subtitle="Estimativa do saldo das suas contas mês a mês, com base no que já está cadastrado: recorrências (salário, aluguel…), faturas de cartão, incluindo parcelas futuras, e as próximas cobranças das assinaturas."
         actions={
           <select className={`${inputCls} w-auto`} aria-label="Período da projeção" value={months} onChange={(e) => setMonths(Number(e.target.value))}>
             {[6, 12, 24, 36].map((m) => (

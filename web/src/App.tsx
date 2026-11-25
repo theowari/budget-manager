@@ -6,11 +6,13 @@ import { EntriesPage } from './pages/EntriesPage';
 import { GoalsPage } from './pages/GoalsPage';
 import { ProjectionPage } from './pages/ProjectionPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { SubscriptionsPage } from './pages/SubscriptionsPage';
 
 const NAV = [
   { to: '/', label: 'Resumo', icon: '🏠', end: true },
   { to: '/lancamentos', label: 'Lançamentos', icon: '🧾' },
   { to: '/cartoes', label: 'Cartões', icon: '💳' },
+  { to: '/assinaturas', label: 'Assinaturas', icon: '🔁' },
   { to: '/caixinhas', label: 'Caixinhas', icon: '🐷' },
   { to: '/orcamento', label: 'Orçamento', icon: '🎯' },
   { to: '/projecao', label: 'Projeção', icon: '📈' },
@@ -47,6 +49,7 @@ export function App() {
           <Route path="/" element={<DashboardPage />} />
           <Route path="/lancamentos" element={<EntriesPage />} />
           <Route path="/cartoes" element={<CardsPage />} />
+          <Route path="/assinaturas" element={<SubscriptionsPage />} />
           <Route path="/caixinhas" element={<GoalsPage />} />
           <Route path="/orcamento" element={<BudgetPage />} />
           <Route path="/projecao" element={<ProjectionPage />} />

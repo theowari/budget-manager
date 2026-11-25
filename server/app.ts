@@ -12,6 +12,8 @@ import { entriesRouter } from './routes/entries';
 import { goalsRouter } from './routes/goals';
 import { projectionRouter } from './routes/projection';
 import { recurringRouter } from './routes/recurring';
+import { subscriptionsRouter } from './routes/subscriptions';
+import { materializeSubscriptions } from './materialize';
 
 export interface AppOptions {
   /** "Hoje" injetável, pra testes determinísticos. */
@@ -33,12 +35,21 @@ export function createApp(db: Db, opts: AppOptions = {}): Express {
   });
   app.use(express.json());
 
+  // As cobranças de assinatura aparecem na fatura, no limite, no orçamento e nos lançamentos.
+  // Gerar antes de qualquer rota da API garante que nenhuma tela mostre dados atrasados,
+  // mesmo que o app tenha ficado fechado por semanas. Sem nada a lançar, só faz uma leitura.
+  app.use('/api', (_req, _res, next) => {
+    materializeSubscriptions(db, today());
+    next();
+  });
+
   app.use('/api/accounts', accountsRouter(db));
   app.use('/api/categories', categoriesRouter(db));
   app.use('/api/cards', cardsRouter(db, today));
   app.use('/api/goals', goalsRouter(db, today));
   app.use('/api/budgets', budgetsRouter(db));
   app.use('/api/recurring', recurringRouter(db, today));
+  app.use('/api/subscriptions', subscriptionsRouter(db, today));
   app.use('/api/projection', projectionRouter(db, today));
   app.use('/api/dashboard', dashboardRouter(db, today));
   app.use('/api', entriesRouter(db)); // /entries, /transactions/:id, /card-purchases/:id
