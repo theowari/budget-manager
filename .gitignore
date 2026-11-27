@@ -8,3 +8,7 @@ data/
 .env.*
 *.log
 .vite/
+
+# Ferramentas de IA (não são necessárias para o programa rodar)
+.agents/
+.claude/
