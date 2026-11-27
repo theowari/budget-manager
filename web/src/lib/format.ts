@@ -43,6 +43,13 @@ export function monthShort(month: Month): string {
   return MONTH_SHORT_FMT.format(monthDate(month));
 }
 
+const MONTH_ABBR_FMT = new Intl.DateTimeFormat('pt-BR', { month: 'short', timeZone: 'UTC' });
+
+/** "2026-11" -> "nov". */
+export function monthAbbr(month: Month): string {
+  return MONTH_ABBR_FMT.format(monthDate(month)).replace('.', '');
+}
+
 /** "2026-11-24" -> "24/11/2026". */
 export function formatDate(date: ISODate): string {
   const [y, m, d] = date.split('-');

@@ -1,10 +1,22 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import {
+  ArrowCounterClockwiseIcon,
+  ArrowsClockwiseIcon,
+  CalendarBlankIcon,
+  CalendarDotsIcon,
+  CreditCardIcon,
+  PencilSimpleIcon,
+  PlusIcon,
+} from '@phosphor-icons/react';
 import { currentMonth } from '../../../shared/dates';
 import type { Subscription } from '../../../shared/types';
 import { api } from '../api/client';
 import { useApiMutation, useCards, useCategories, useSubscriptions } from '../api/hooks';
-import { Amount, Badge, Button, Card, ConfirmButton, Dot, Empty, ErrorBox, Field, inputCls, Modal, MoneyField, PageHeader, SectionTitle } from '../components/ui';
+import {
+  Amount, Badge, BigAmount, Button, Card, ConfirmButton, DateTile, Dot, Empty, ErrorBox, Field, FormActions, IconButton,
+  inputCls, Loading, Modal, MoneyField, Note, PageHeader, SectionTitle, Select, StatCard,
+} from '../components/ui';
 import { brl, centsToInput, formatDate, monthLabel, parseMoney } from '../lib/format';
 
 export function SubscriptionsPage() {
@@ -33,46 +45,43 @@ export function SubscriptionsPage() {
         title="Assinaturas"
         subtitle="Serviços cobrados todo mês no cartão, sem número de parcelas: Spotify, YouTube Premium, Discord… A cobrança continua até você cancelar."
         actions={
-          <Button onClick={() => setEditing('new')} disabled={!hasCards}>
-            + Nova assinatura
+          <Button icon={PlusIcon} onClick={() => setEditing('new')} disabled={!hasCards}>
+            Nova assinatura
           </Button>
         }
       />
 
       <ErrorBox error={subs.error ?? cancel.error ?? reactivate.error} />
-      {subs.isLoading && <p className="text-sm text-slate-500">Carregando…</p>}
+      {subs.isLoading && <Loading />}
 
       {!subs.isLoading && !hasCards && (
-        <Empty>
-          Assinaturas são cobradas num cartão. <Link to="/cartoes" className="font-medium text-indigo-600 hover:underline">Cadastre um cartão</Link> para começar.
+        <Empty icon={CreditCardIcon}>
+          Assinaturas são cobradas num cartão.{' '}
+          <Link to="/cartoes" className="text-link">
+            Cadastre um cartão
+          </Link>{' '}
+          para começar.
         </Empty>
       )}
 
       {subs.data && hasCards && (
         <>
-          <div className="mb-6 grid gap-3 sm:grid-cols-3">
-            <Card>
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Custo por mês</p>
-              <p className="mt-1 text-xl">
-                <Amount text={brl(monthly)} tone="expense" />
-              </p>
-            </Card>
-            <Card>
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Custo em 12 meses</p>
-              <p className="mt-1 text-xl">
-                <Amount text={brl(monthly * 12)} tone="expense" />
-              </p>
-            </Card>
-            <Card>
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Assinaturas ativas</p>
-              <p className="mt-1 text-xl font-semibold tabular text-slate-900">{active.length}</p>
-            </Card>
+          <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <StatCard label="Custo por mês" icon={CalendarBlankIcon} tone="expense">
+              <BigAmount text={brl(monthly)} tone="expense" />
+            </StatCard>
+            <StatCard label="Custo em 12 meses" icon={CalendarDotsIcon} tone="expense">
+              <BigAmount text={brl(monthly * 12)} tone="expense" />
+            </StatCard>
+            <StatCard label="Assinaturas ativas" icon={ArrowsClockwiseIcon} tone="accent">
+              <BigAmount text={String(active.length)} />
+            </StatCard>
           </div>
 
           <SectionTitle>Ativas</SectionTitle>
           {active.length ? (
-            <Card className="p-0">
-              <ul className="divide-y divide-slate-100">
+            <Card flush>
+              <ul className="divide-y divide-line">
                 {active.map((s) => (
                   <SubscriptionRow
                     key={s.id}
@@ -84,14 +93,16 @@ export function SubscriptionsPage() {
               </ul>
             </Card>
           ) : (
-            <Empty>Nenhuma assinatura ativa. Adicione seus serviços (Spotify, YouTube Premium, Discord…) para ver quanto eles custam por mês.</Empty>
+            <Empty icon={ArrowsClockwiseIcon}>
+              Nenhuma assinatura ativa. Adicione seus serviços (Spotify, YouTube Premium, Discord…) para ver quanto eles custam por mês.
+            </Empty>
           )}
 
           {ended.length > 0 && (
-            <div className="mt-6">
+            <div className="mt-8">
               <SectionTitle>Canceladas</SectionTitle>
-              <Card className="p-0">
-                <ul className="divide-y divide-slate-100">
+              <Card flush>
+                <ul className="divide-y divide-line">
                   {ended.map((s) => (
                     <SubscriptionRow
                       key={s.id}
@@ -99,7 +110,13 @@ export function SubscriptionsPage() {
                       muted
                       onEdit={() => setEditing(s)}
                       action={
-                        <Button small variant="secondary" disabled={reactivate.isPending} onClick={() => reactivate.mutate(s.id)}>
+                        <Button
+                          small
+                          variant="secondary"
+                          icon={ArrowCounterClockwiseIcon}
+                          disabled={reactivate.isPending}
+                          onClick={() => reactivate.mutate(s.id)}
+                        >
                           Reativar
                         </Button>
                       }
@@ -110,10 +127,10 @@ export function SubscriptionsPage() {
             </div>
           )}
 
-          <p className="mt-4 text-xs text-slate-400">
+          <Note>
             No dia da cobrança, cada assinatura entra como uma compra à vista na fatura do cartão (e no limite, no orçamento e nos lançamentos). Cancelar mantém o histórico e pode ser
             desfeito; a projeção de saldo já considera as próximas cobranças.
-          </p>
+          </Note>
         </>
       )}
 
@@ -126,42 +143,41 @@ function SubscriptionRow({ sub, onEdit, action, muted }: { sub: Subscription; on
   // numa assinatura cancelada, end_month é o último mês cobrado (se chegou a cobrar)
   const hadCharges = sub.end_month !== null && sub.end_month >= sub.start_month;
   return (
-    <li className={`flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3.5 ${muted ? 'bg-slate-50/60' : ''}`}>
-      <span className="w-14 shrink-0 text-xs text-slate-400">dia {sub.day_of_month}</span>
+    <li className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5 sm:px-5">
+      <DateTile day={sub.day_of_month} />
       <div className="min-w-0 flex-1">
-        <p className={`truncate text-sm font-medium ${muted ? 'text-slate-500' : 'text-slate-900'}`}>{sub.name}</p>
-        <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
-          <span className="inline-flex items-center gap-1">
+        <p className={`truncate text-[0.9375rem] font-medium ${muted ? 'text-muted' : 'text-ink'}`}>{sub.name}</p>
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+          <span className="inline-flex items-center gap-1.5">
             <Dot color={sub.category_color} />
             {sub.category_name}
           </span>
-          <span>·</span>
-          <span className="inline-flex items-center gap-1">
-            <Dot color={sub.card_color} />
+          <span className="inline-flex items-center gap-1.5">
+            <CreditCardIcon aria-hidden size={14} />
             {sub.card_name}
           </span>
           {sub.next_charge_date ? (
             <>
-              <span>·</span>
               <span>próxima cobrança {formatDate(sub.next_charge_date)}</span>
               {sub.end_month && <Badge>até {monthLabel(sub.end_month)}</Badge>}
             </>
           ) : (
             <>
-              <Badge tone="slate">cancelada</Badge>
+              <Badge>cancelada</Badge>
               {hadCharges && <span>última cobrança em {monthLabel(sub.end_month!)}</span>}
             </>
           )}
-        </p>
+        </div>
       </div>
-      <div className="text-right">
-        <Amount text={brl(sub.amount_cents)} tone={muted ? 'neutral' : 'expense'} />
-        <span className="ml-1 text-xs text-slate-400">/mês</span>
+      <div className="text-right whitespace-nowrap">
+        <span className="text-[0.9375rem]">
+          <Amount text={brl(sub.amount_cents)} tone={muted ? 'neutral' : 'expense'} />
+        </span>
+        <span className="ml-1 text-xs text-muted">/mês</span>
       </div>
-      <div className="flex shrink-0 items-center gap-1">
-        <Button small variant="ghost" onClick={onEdit}>
-          Editar
-        </Button>
+      {/* no celular os botões vão para a linha de baixo */}
+      <div className="flex w-full shrink-0 items-center justify-end gap-1 sm:w-auto sm:min-w-[13rem]">
+        <IconButton label="Editar" icon={PencilSimpleIcon} onClick={onEdit} />
         {action}
       </div>
     </li>
@@ -227,25 +243,25 @@ function SubscriptionModal({ subscription, onClose }: { subscription?: Subscript
           </Field>
         </div>
         <Field label="Cobrada no cartão">
-          <select className={inputCls} value={cardId} onChange={(e) => setCardId(e.target.value)}>
+          <Select value={cardId} onChange={(e) => setCardId(e.target.value)}>
             {cards.data?.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field label="Categoria">
-          <select className={inputCls} value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+          <Select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
             <option value="">Selecione…</option>
             {categories.data?.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid items-end gap-x-3 sm:grid-cols-2">
           <Field label="Primeira cobrança em">
             <input className={inputCls} type="month" value={startMonth} onChange={(e) => setStartMonth(e.target.value)} required />
           </Field>
@@ -253,23 +269,20 @@ function SubscriptionModal({ subscription, onClose }: { subscription?: Subscript
             <input className={inputCls} type="month" value={endMonth} onChange={(e) => setEndMonth(e.target.value)} />
           </Field>
         </div>
-        <p className="-mt-1 mb-3 text-xs text-slate-400">
+        <p className="mb-3 text-xs leading-5 text-muted">
           {subscription
             ? 'Mudanças valem daqui pra frente: as cobranças já lançadas nas faturas não mudam (ótimo para reajuste de preço). Excluir também mantém as cobranças já lançadas.'
             : 'Deixe a última cobrança em branco: ela continua todo mês até você cancelar. Se o dia da cobrança deste mês já passou, ela é lançada na fatura agora; meses anteriores ao atual também, então comece no mês atual se aquelas faturas já foram pagas.'}
         </p>
         <ErrorBox error={formError || save.error || remove.error} />
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <div>{subscription && <ConfirmButton small={false} label="Excluir" onConfirm={() => remove.mutate(undefined, { onSuccess: onClose })} />}</div>
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={onClose}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={save.isPending}>
-              Salvar
-            </Button>
-          </div>
-        </div>
+        <FormActions danger={subscription && <ConfirmButton small={false} label="Excluir" onConfirm={() => remove.mutate(undefined, { onSuccess: onClose })} />}>
+          <Button variant="secondary" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button type="submit" disabled={save.isPending}>
+            Salvar
+          </Button>
+        </FormActions>
       </form>
     </Modal>
   );

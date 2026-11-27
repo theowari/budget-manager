@@ -18,8 +18,8 @@ echo.
 echo === Iniciando o servidor em http://localhost:3001 ===
 echo (feche esta janela ou aperte Ctrl+C para parar)
 echo.
-start http://localhost:3001
 call npm start
+start http://localhost:3001
 
 echo.
 echo O servidor parou.

@@ -1,20 +1,21 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { ArrowDownLeftIcon, ArrowUpRightIcon, BankIcon, PencilSimpleIcon, PlusIcon, RepeatIcon, TagIcon } from '@phosphor-icons/react';
 import { currentMonth } from '../../../shared/dates';
 import type { Account, Category, Kind, RecurringRuleRow } from '../../../shared/types';
 import { api } from '../api/client';
 import { useAccounts, useApiMutation, useCategories, useRecurring } from '../api/hooks';
 import {
-  Amount, Badge, Button, Card, ColorPicker, ConfirmButton, Dot, Empty, ErrorBox, Field, inputCls, Modal, MoneyField,
-  PageHeader, SectionTitle,
+  Amount, Badge, Button, Card, ColorPicker, ConfirmButton, DateTile, Dot, Empty, ErrorBox, Field, FormActions, IconButton,
+  IconTile, inputCls, Modal, MoneyField, Note, PageHeader, SectionTitle, Segmented, Select,
 } from '../components/ui';
 import { brl, centsToInput, monthLabel, parseMoney } from '../lib/format';
 
 type Tab = 'accounts' | 'categories' | 'recurring';
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'accounts', label: 'Contas' },
-  { id: 'categories', label: 'Categorias' },
-  { id: 'recurring', label: 'Recorrências' },
+const TABS = [
+  { value: 'accounts' as const, label: 'Contas', icon: BankIcon },
+  { value: 'categories' as const, label: 'Categorias', icon: TagIcon },
+  { value: 'recurring' as const, label: 'Recorrências', icon: RepeatIcon },
 ];
 
 export function SettingsPage() {
@@ -24,20 +25,7 @@ export function SettingsPage() {
     <>
       <PageHeader title="Cadastros" subtitle="Suas contas, tipos de gasto e lançamentos que se repetem todo mês." />
 
-      <div className="mb-5 inline-flex rounded-lg bg-slate-200/70 p-1" role="tablist">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            role="tab"
-            aria-selected={tab === t.id}
-            onClick={() => setTab(t.id)}
-            className={`rounded-md px-4 py-1.5 text-sm font-medium transition ${tab === t.id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <Segmented<Tab> tabs label="Tipo de cadastro" className="mb-6 sm:inline-flex" value={tab} onChange={setTab} options={TABS} />
 
       {tab === 'accounts' && <AccountsTab />}
       {tab === 'categories' && <CategoriesTab />}
@@ -54,24 +42,29 @@ function AccountsTab() {
 
   return (
     <>
-      <SectionTitle aside={<Button small onClick={() => setEditing('new')}>+ Nova conta</Button>}>Contas</SectionTitle>
+      <SectionTitle
+        aside={
+          <Button small icon={PlusIcon} onClick={() => setEditing('new')}>
+            Nova conta
+          </Button>
+        }
+      >
+        Contas
+      </SectionTitle>
       <ErrorBox error={accounts.error} />
-      <Card className="p-0">
-        <ul className="divide-y divide-slate-100">
+      <Card flush>
+        <ul className="divide-y divide-line">
           {accounts.data?.map((a) => (
-            <li key={a.id} className="flex items-center gap-4 px-5 py-3.5">
-              <span className="flex-1 font-medium text-slate-900">{a.name}</span>
+            <li key={a.id} className="flex items-center gap-3 px-4 py-3.5 sm:px-5">
+              <IconTile icon={BankIcon} tone="accent" />
+              <span className="min-w-0 flex-1 truncate text-[0.9375rem] font-medium text-ink">{a.name}</span>
               <Amount text={brl(a.balance_cents)} tone={a.balance_cents < 0 ? 'expense' : 'neutral'} />
-              <Button small variant="ghost" onClick={() => setEditing(a)}>
-                Editar
-              </Button>
+              <IconButton label="Editar" icon={PencilSimpleIcon} onClick={() => setEditing(a)} />
             </li>
           ))}
         </ul>
       </Card>
-      <p className="mt-3 text-xs text-slate-400">
-        O saldo de cada conta é calculado: saldo inicial + receitas − gastos − faturas pagas − dinheiro guardado em caixinhas.
-      </p>
+      <Note>O saldo de cada conta é calculado: saldo inicial + receitas − gastos − faturas pagas − dinheiro guardado em caixinhas.</Note>
       {editing && <AccountModal account={editing === 'new' ? undefined : editing} onClose={() => setEditing(null)} />}
     </>
   );
@@ -102,17 +95,14 @@ function AccountModal({ account, onClose }: { account?: Account; onClose: () => 
         </Field>
         <MoneyField label="Saldo inicial" value={initial} onChange={setInitial} hint="Quanto você tinha nesta conta quando começou a usar o sistema." />
         <ErrorBox error={formError || save.error || remove.error} />
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <div>{account && <ConfirmButton small={false} label="Excluir conta" onConfirm={() => remove.mutate(undefined, { onSuccess: onClose })} />}</div>
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={onClose}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={save.isPending}>
-              Salvar
-            </Button>
-          </div>
-        </div>
+        <FormActions danger={account && <ConfirmButton small={false} label="Excluir conta" onConfirm={() => remove.mutate(undefined, { onSuccess: onClose })} />}>
+          <Button variant="secondary" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button type="submit" disabled={save.isPending}>
+            Salvar
+          </Button>
+        </FormActions>
       </form>
     </Modal>
   );
@@ -122,7 +112,7 @@ function AccountModal({ account, onClose }: { account?: Account; onClose: () => 
 
 function CategoriesTab() {
   return (
-    <div className="grid gap-6 md:grid-cols-2">
+    <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
       <CategoryColumn kind="expense" title="Tipos de gasto" />
       <CategoryColumn kind="income" title="Tipos de receita" />
     </div>
@@ -135,24 +125,30 @@ function CategoryColumn({ kind, title }: { kind: Kind; title: string }) {
 
   return (
     <div>
-      <SectionTitle aside={<Button small onClick={() => setEditing('new')}>+ Nova</Button>}>{title}</SectionTitle>
+      <SectionTitle
+        aside={
+          <Button small variant="secondary" icon={PlusIcon} onClick={() => setEditing('new')}>
+            Nova
+          </Button>
+        }
+      >
+        {title}
+      </SectionTitle>
       <ErrorBox error={categories.error} />
-      <Card className="p-0">
+      <Card flush>
         {categories.data?.length ? (
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-line">
             {categories.data.map((c) => (
-              <li key={c.id} className="flex items-center gap-3 px-5 py-3">
-                <Dot color={c.color} />
-                <span className="flex-1 text-sm font-medium text-slate-800">{c.name}</span>
-                <Button small variant="ghost" onClick={() => setEditing(c)}>
-                  Editar
-                </Button>
+              <li key={c.id} className="flex items-center gap-3 px-4 py-2.5 sm:px-5">
+                <IconTile small icon={TagIcon} color={c.color} />
+                <span className="min-w-0 flex-1 truncate text-[0.9375rem] font-medium text-ink">{c.name}</span>
+                <IconButton label={`Editar ${c.name}`} icon={PencilSimpleIcon} onClick={() => setEditing(c)} />
               </li>
             ))}
           </ul>
         ) : (
           <div className="p-5">
-            <Empty>Nenhuma categoria.</Empty>
+            <Empty icon={TagIcon}>Nenhuma categoria.</Empty>
           </div>
         )}
       </Card>
@@ -184,17 +180,14 @@ function CategoryModal({ kind, category, onClose }: { kind: Kind; category?: Cat
         </Field>
         <ColorPicker value={color} onChange={setColor} />
         <ErrorBox error={formError || save.error || remove.error} />
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <div>{category && <ConfirmButton small={false} label="Excluir" onConfirm={() => remove.mutate(undefined, { onSuccess: onClose })} />}</div>
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={onClose}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={save.isPending}>
-              Salvar
-            </Button>
-          </div>
-        </div>
+        <FormActions danger={category && <ConfirmButton small={false} label="Excluir" onConfirm={() => remove.mutate(undefined, { onSuccess: onClose })} />}>
+          <Button variant="secondary" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button type="submit" disabled={save.isPending}>
+            Salvar
+          </Button>
+        </FormActions>
       </form>
     </Modal>
   );
@@ -208,35 +201,49 @@ function RecurringTab() {
 
   return (
     <>
-      <SectionTitle aside={<Button small onClick={() => setEditing('new')}>+ Nova recorrência</Button>}>Lançamentos que se repetem todo mês</SectionTitle>
+      <SectionTitle
+        aside={
+          <Button small icon={PlusIcon} onClick={() => setEditing('new')}>
+            Nova recorrência
+          </Button>
+        }
+      >
+        Lançamentos que se repetem todo mês
+      </SectionTitle>
       <ErrorBox error={rules.error} />
       {rules.data?.length ? (
-        <Card className="p-0">
-          <ul className="divide-y divide-slate-100">
+        <Card flush>
+          <ul className="divide-y divide-line">
             {rules.data.map((r) => (
-              <li key={r.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3">
-                <span className="w-16 shrink-0 text-xs text-slate-400">dia {r.day_of_month}</span>
+              <li key={r.id} className="flex items-center gap-3 px-4 py-3 sm:gap-4 sm:px-5">
+                <DateTile day={r.day_of_month} />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-slate-900">{r.description}</p>
-                  <p className="flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
-                    <Dot color={r.category_color} /> {r.category_name} · {r.account_name} · desde {monthLabel(r.start_month)}
+                  <p className="truncate text-[0.9375rem] font-medium text-ink">{r.description}</p>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+                    <span className="inline-flex items-center gap-1.5">
+                      <Dot color={r.category_color} />
+                      {r.category_name}
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <BankIcon aria-hidden size={14} />
+                      {r.account_name}
+                    </span>
+                    <span>desde {monthLabel(r.start_month)}</span>
                     {r.end_month && <Badge>até {monthLabel(r.end_month)}</Badge>}
-                  </p>
+                  </div>
                 </div>
-                <Amount text={`${r.type === 'income' ? '+' : '−'} ${brl(r.amount_cents)}`} tone={r.type} />
-                <Button small variant="ghost" onClick={() => setEditing(r)}>
-                  Editar
-                </Button>
+                <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-4">
+                  <Amount text={`${r.type === 'income' ? '+' : '−'} ${brl(r.amount_cents)}`} tone={r.type} />
+                  <IconButton label="Editar" icon={PencilSimpleIcon} onClick={() => setEditing(r)} />
+                </div>
               </li>
             ))}
           </ul>
         </Card>
       ) : (
-        <Empty>Cadastre seu salário, aluguel, assinaturas… O sistema lança todo mês e usa isso na projeção.</Empty>
+        <Empty icon={RepeatIcon}>Cadastre seu salário, aluguel, assinaturas… O sistema lança todo mês e usa isso na projeção.</Empty>
       )}
-      <p className="mt-3 text-xs text-slate-400">
-        Ao criar, os meses passados desde o início já são lançados. Editar vale só daqui pra frente; apagar uma recorrência mantém os lançamentos que ela já gerou.
-      </p>
+      <Note>Ao criar, os meses passados desde o início já são lançados. Editar vale só daqui pra frente; apagar uma recorrência mantém os lançamentos que ela já gerou.</Note>
       {editing && <RecurringModal rule={editing === 'new' ? undefined : editing} onClose={() => setEditing(null)} />}
     </>
   );
@@ -287,23 +294,19 @@ function RecurringModal({ rule, onClose }: { rule?: RecurringRuleRow; onClose: (
   return (
     <Modal title={rule ? 'Editar recorrência' : 'Nova recorrência'} onClose={onClose}>
       <form onSubmit={submit}>
-        <div className="mb-4 grid grid-cols-2 gap-2 rounded-lg bg-slate-100 p-1" role="tablist" aria-label="Tipo">
-          {(['expense', 'income'] as const).map((k) => (
-            <button
-              key={k}
-              type="button"
-              role="tab"
-              aria-selected={type === k}
-              onClick={() => {
-                setType(k);
-                setCategoryId('');
-              }}
-              className={`rounded-md py-1.5 text-sm font-medium transition ${type === k ? 'bg-white shadow-sm ' + (k === 'expense' ? 'text-rose-600' : 'text-emerald-600') : 'text-slate-500'}`}
-            >
-              {k === 'expense' ? 'Gasto fixo' : 'Receita fixa'}
-            </button>
-          ))}
-        </div>
+        <Segmented<Kind>
+          label="Tipo"
+          className="mb-5"
+          value={type}
+          onChange={(k) => {
+            setType(k);
+            setCategoryId('');
+          }}
+          options={[
+            { value: 'expense', label: 'Gasto fixo', icon: ArrowUpRightIcon, tone: 'expense' },
+            { value: 'income', label: 'Receita fixa', icon: ArrowDownLeftIcon, tone: 'income' },
+          ]}
+        />
         <Field label="Descrição">
           <input className={inputCls} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Ex.: Salário, Aluguel, Netflix" autoFocus />
         </Field>
@@ -314,25 +317,25 @@ function RecurringModal({ rule, onClose }: { rule?: RecurringRuleRow; onClose: (
           </Field>
         </div>
         <Field label={type === 'income' ? 'Cai na conta' : 'Sai da conta'}>
-          <select className={inputCls} value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+          <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
             {accounts.data?.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field label="Categoria">
-          <select className={inputCls} value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+          <Select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
             <option value="">Selecione…</option>
             {categories.data?.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid items-end gap-x-3 sm:grid-cols-2">
           <Field label="Começa em">
             <input className={inputCls} type="month" value={startMonth} onChange={(e) => setStartMonth(e.target.value)} required />
           </Field>
@@ -341,17 +344,14 @@ function RecurringModal({ rule, onClose }: { rule?: RecurringRuleRow; onClose: (
           </Field>
         </div>
         <ErrorBox error={formError || save.error || remove.error} />
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <div>{rule && <ConfirmButton small={false} label="Excluir" onConfirm={() => remove.mutate(undefined, { onSuccess: onClose })} />}</div>
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={onClose}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={save.isPending}>
-              Salvar
-            </Button>
-          </div>
-        </div>
+        <FormActions danger={rule && <ConfirmButton small={false} label="Excluir" onConfirm={() => remove.mutate(undefined, { onSuccess: onClose })} />}>
+          <Button variant="secondary" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button type="submit" disabled={save.isPending}>
+            Salvar
+          </Button>
+        </FormActions>
       </form>
     </Modal>
   );

@@ -1,10 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { ArrowDownLeftIcon, ArrowUpRightIcon, PlusIcon } from '@phosphor-icons/react';
 import { todayISO } from '../../../shared/dates';
 import type { Category, Entry, Kind } from '../../../shared/types';
 import { api } from '../api/client';
 import { useAccounts, useApiMutation, useCards, useCategories } from '../api/hooks';
 import { brl, centsToInput, parseMoney } from '../lib/format';
-import { Button, ColorPicker, ErrorBox, Field, inputCls, Modal, MoneyField } from './ui';
+import { Button, ColorPicker, ErrorBox, Field, FormActions, inputCls, Modal, MoneyField, Segmented, Select } from './ui';
 
 interface Props {
   /** Se informado, edita este lançamento (só lançamentos diretos na conta). */
@@ -99,24 +100,19 @@ export function EntryForm({ editing, defaultPayWith, onClose }: Props) {
   return (
     <Modal title={editing ? 'Editar lançamento' : 'Novo lançamento'} onClose={onClose}>
       <form onSubmit={submit}>
-        <div className="mb-4 grid grid-cols-2 gap-2 rounded-lg bg-slate-100 p-1" role="tablist" aria-label="Tipo">
-          {(['expense', 'income'] as const).map((k) => (
-            <button
-              key={k}
-              type="button"
-              role="tab"
-              aria-selected={type === k}
-              onClick={() => changeType(k)}
-              className={`rounded-md py-1.5 text-sm font-medium transition ${
-                type === k ? (k === 'expense' ? 'bg-white text-rose-600 shadow-sm' : 'bg-white text-emerald-600 shadow-sm') : 'text-slate-500'
-              }`}
-            >
-              {k === 'expense' ? 'Gasto' : 'Receita'}
-            </button>
-          ))}
-        </div>
+        <Segmented<Kind>
+          label="Tipo"
+          className="mb-5"
+          value={type}
+          onChange={changeType}
+          options={[
+            { value: 'expense', label: 'Gasto', icon: ArrowUpRightIcon, tone: 'expense' },
+            { value: 'income', label: 'Receita', icon: ArrowDownLeftIcon, tone: 'income' },
+          ]}
+        />
 
         <MoneyField
+          large
           label={isCard ? 'Valor total da compra' : 'Valor'}
           value={amount}
           onChange={setAmount}
@@ -125,7 +121,7 @@ export function EntryForm({ editing, defaultPayWith, onClose }: Props) {
         />
 
         <Field label={type === 'income' ? 'Recebido em' : 'Pago com'}>
-          <select className={inputCls} value={payWith} onChange={(e) => setPayWith(e.target.value)} disabled={!!editing}>
+          <Select value={payWith} onChange={(e) => setPayWith(e.target.value)} disabled={!!editing}>
             <optgroup label="Contas">
               {accounts.data?.map((a) => (
                 <option key={a.id} value={`account:${a.id}`}>
@@ -142,7 +138,7 @@ export function EntryForm({ editing, defaultPayWith, onClose }: Props) {
                 ))}
               </optgroup>
             )}
-          </select>
+          </Select>
         </Field>
 
         {isCard && !editing && (
@@ -151,37 +147,49 @@ export function EntryForm({ editing, defaultPayWith, onClose }: Props) {
           </Field>
         )}
 
-        <Field label="Categoria">
-          {creatingCategory ? (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <input className={`${inputCls} mb-3`} placeholder="Nome da categoria" value={newName} onChange={(e) => setNewName(e.target.value)} autoFocus />
-              <ColorPicker value={newColor} onChange={setNewColor} />
-              <ErrorBox error={createCategory.error} />
-              <div className="flex gap-2">
-                <Button small onClick={submitNewCategory} disabled={createCategory.isPending}>
-                  Criar categoria
-                </Button>
-                <Button small variant="ghost" onClick={() => setCreatingCategory(false)}>
-                  Cancelar
-                </Button>
-              </div>
-            </div>
-          ) : (
+        {creatingCategory ? (
+          // fora de um <label>: o bloco tem vários controles
+          <div className="mb-4 rounded-xl border border-line bg-surface p-4">
+            <label className="mb-4 block">
+              <span className="mb-1.5 block text-sm font-medium text-ink">Nome da nova categoria</span>
+              <input className={inputCls} value={newName} onChange={(e) => setNewName(e.target.value)} autoFocus />
+            </label>
+            <ColorPicker value={newColor} onChange={setNewColor} />
+            <ErrorBox error={createCategory.error} />
             <div className="flex gap-2">
-              <select className={inputCls} value={categoryId} onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : '')}>
-                <option value="">Selecione…</option>
-                {categories.data?.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-              <Button variant="secondary" onClick={() => setCreatingCategory(true)} aria-label="Criar nova categoria" title="Nova categoria">
-                +
+              <Button small onClick={submitNewCategory} disabled={createCategory.isPending}>
+                Criar categoria
+              </Button>
+              <Button small variant="ghost" onClick={() => setCreatingCategory(false)}>
+                Cancelar
               </Button>
             </div>
-          )}
-        </Field>
+          </div>
+        ) : (
+          <div className="flex items-end gap-2">
+            <div className="min-w-0 flex-1">
+              <Field label="Categoria">
+                <Select value={categoryId} onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : '')}>
+                  <option value="">Selecione…</option>
+                  {categories.data?.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
+            <Button
+              variant="secondary"
+              className="mb-4 w-11 !px-0"
+              onClick={() => setCreatingCategory(true)}
+              aria-label="Criar nova categoria"
+              title="Nova categoria"
+            >
+              <PlusIcon aria-hidden size={18} weight="bold" />
+            </Button>
+          </div>
+        )}
 
         <Field label="Data">
           <input className={inputCls} type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
@@ -193,14 +201,14 @@ export function EntryForm({ editing, defaultPayWith, onClose }: Props) {
 
         <ErrorBox error={formError || save.error} />
 
-        <div className="mt-2 flex justify-end gap-2">
+        <FormActions>
           <Button variant="secondary" onClick={onClose}>
             Cancelar
           </Button>
           <Button type="submit" disabled={save.isPending}>
             {save.isPending ? 'Salvando…' : 'Salvar'}
           </Button>
-        </div>
+        </FormActions>
       </form>
     </Modal>
   );

@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from 'react';
+import { TagIcon } from '@phosphor-icons/react';
 import { currentMonth } from '../../../shared/dates';
 import type { BudgetRow } from '../../../shared/types';
 import { api } from '../api/client';
 import { useApiMutation, useBudgets } from '../api/hooks';
-import { Badge, Button, Card, Dot, Empty, ErrorBox, inputCls, MonthNav, PageHeader, ProgressBar } from '../components/ui';
+import { Badge, Button, Card, Dot, Empty, ErrorBox, Loading, MoneyInput, MonthNav, PageHeader, ProgressBar } from '../components/ui';
 import { brl, centsToInput, parseMoney } from '../lib/format';
 
 export function BudgetPage() {
@@ -13,6 +14,7 @@ export function BudgetPage() {
   const withLimit = budgets.data?.filter((b) => b.limit_cents !== null) ?? [];
   const totalLimit = withLimit.reduce((s, b) => s + (b.limit_cents ?? 0), 0);
   const totalSpent = withLimit.reduce((s, b) => s + b.spent_cents, 0);
+  const totalOver = totalSpent > totalLimit;
 
   return (
     <>
@@ -26,23 +28,29 @@ export function BudgetPage() {
 
       {withLimit.length > 0 && (
         <Card className="mb-4">
-          <div className="mb-2 flex items-baseline justify-between text-sm">
-            <span className="font-medium text-slate-700">Total das categorias com limite</span>
-            <span className="tabular text-slate-500">
-              <strong className="text-slate-900">{brl(totalSpent)}</strong> de {brl(totalLimit)}
-            </span>
+          <div className="mb-3 flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+            <div>
+              <p className="text-sm text-muted">Total das categorias com limite</p>
+              <p className="mt-1 flex flex-wrap items-baseline gap-x-2">
+                <span className="text-[2rem] leading-10 font-medium tracking-[-0.03em] text-ink">{brl(totalSpent)}</span>
+                <span className="tabular text-sm text-muted">de {brl(totalLimit)}</span>
+              </p>
+            </div>
+            <p className={`tabular pb-1 text-sm font-medium ${totalOver ? 'text-expense' : 'text-income'}`}>
+              {totalOver ? `${brl(totalSpent - totalLimit)} acima` : `${brl(totalLimit - totalSpent)} restantes`}
+            </p>
           </div>
-          <ProgressBar percent={totalLimit ? (totalSpent / totalLimit) * 100 : 0} over={totalSpent > totalLimit} />
+          <ProgressBar percent={totalLimit ? (totalSpent / totalLimit) * 100 : 0} over={totalOver} label="Orçamento total" />
         </Card>
       )}
 
       {budgets.isLoading ? (
-        <p className="text-sm text-slate-500">Carregando…</p>
+        <Loading />
       ) : !budgets.data?.length ? (
-        <Empty>Cadastre categorias de gasto para definir limites.</Empty>
+        <Empty icon={TagIcon}>Cadastre categorias de gasto para definir limites.</Empty>
       ) : (
-        <Card className="p-0">
-          <ul className="divide-y divide-slate-100">
+        <Card flush>
+          <ul className="divide-y divide-line">
             {budgets.data.map((row) => (
               <BudgetItem key={`${row.category_id}-${row.limit_cents}`} row={row} />
             ))}
@@ -70,48 +78,49 @@ function BudgetItem({ row }: { row: BudgetRow }) {
 
   const hasLimit = row.limit_cents !== null;
   return (
-    <li className="px-5 py-4">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <span className="flex items-center gap-2 font-medium text-slate-900">
-          <Dot color={row.color} />
-          {row.name}
-          {row.over && <Badge tone="red">estourou</Badge>}
-          {!row.over && row.percent !== null && row.percent >= 80 && <Badge tone="amber">quase no limite</Badge>}
-        </span>
-        <form onSubmit={submit} className="flex items-center gap-2">
-          <input
-            aria-label={`Limite mensal de ${row.name}`}
-            className={`${inputCls} w-32 tabular`}
-            inputMode="decimal"
-            placeholder="Limite R$"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-          />
-          <Button type="submit" small variant="secondary" disabled={save.isPending}>
+    <li className="px-4 py-4 sm:px-5">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="min-w-0">
+          <span className="flex flex-wrap items-center gap-2 text-[0.9375rem] font-medium text-ink">
+            <Dot color={row.color} />
+            {row.name}
+            {row.over && <Badge tone="red">estourou</Badge>}
+            {!row.over && row.percent !== null && row.percent >= 80 && <Badge tone="amber">quase no limite</Badge>}
+          </span>
+          {!hasLimit && (
+            <p className="mt-0.5 text-xs text-muted">Sem limite definido{row.spent_cents > 0 ? ` · gasto no mês: ${brl(row.spent_cents)}` : ''}.</p>
+          )}
+        </div>
+        <form onSubmit={submit} className="flex w-full items-center gap-2 sm:w-auto">
+          <span className="min-w-0 flex-1 sm:w-36 sm:flex-none">
+            <MoneyInput aria-label={`Limite mensal de ${row.name}`} placeholder="Limite" value={value} onChange={(e) => setValue(e.target.value)} />
+          </span>
+          <Button type="submit" variant="secondary" className="min-w-24" disabled={save.isPending}>
             {hasLimit ? 'Atualizar' : 'Definir'}
           </Button>
-          {hasLimit && (
-            <Button small variant="ghost" onClick={() => clear.mutate(undefined)}>
-              Remover
-            </Button>
-          )}
+          {/* o espaço fica reservado para os campos alinharem entre as linhas */}
+          <span className={`shrink-0 sm:w-24 ${hasLimit ? '' : 'hidden sm:block'}`}>
+            {hasLimit && (
+              <Button variant="ghost" className="w-full" onClick={() => clear.mutate(undefined)}>
+                Remover
+              </Button>
+            )}
+          </span>
         </form>
       </div>
 
-      {hasLimit ? (
-        <>
-          <ProgressBar percent={row.percent ?? 0} color={row.color} over={row.over} />
-          <p className="mt-1.5 flex justify-between text-xs text-slate-500">
+      {hasLimit && (
+        <div className="mt-3">
+          <ProgressBar percent={row.percent ?? 0} color={row.color} over={row.over} label={`Orçamento de ${row.name}`} />
+          <p className="mt-1.5 flex flex-wrap justify-between gap-x-3 text-xs text-muted">
             <span>
-              Gasto <strong className="tabular text-slate-800">{brl(row.spent_cents)}</strong> de {brl(row.limit_cents!)} ({row.percent}%)
+              Gasto <strong className="tabular font-medium text-ink">{brl(row.spent_cents)}</strong> de {brl(row.limit_cents!)} ({row.percent}%)
             </span>
-            <span className={row.over ? 'font-medium text-rose-600' : ''}>
+            <span className={`tabular ${row.over ? 'font-medium text-expense' : ''}`}>
               {row.over ? `${brl(row.spent_cents - row.limit_cents!)} acima` : `${brl(row.limit_cents! - row.spent_cents)} restantes`}
             </span>
           </p>
-        </>
-      ) : (
-        <p className="text-xs text-slate-400">Sem limite definido{row.spent_cents > 0 ? ` · gasto no mês: ${brl(row.spent_cents)}` : ''}.</p>
+        </div>
       )}
       <ErrorBox error={formError || save.error || clear.error} />
     </li>

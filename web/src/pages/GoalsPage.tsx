@@ -1,11 +1,22 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import {
+  ArrowDownIcon,
+  ArrowUpIcon,
+  CalendarCheckIcon,
+  ClockCounterClockwiseIcon,
+  ConfettiIcon,
+  PencilSimpleIcon,
+  PiggyBankIcon,
+  PlusIcon,
+  WarningCircleIcon,
+} from '@phosphor-icons/react';
 import { todayISO } from '../../../shared/dates';
 import type { Goal } from '../../../shared/types';
 import { api } from '../api/client';
 import { useAccounts, useApiMutation, useGoalMovements, useGoals } from '../api/hooks';
 import {
-  Amount, Badge, Button, Card, ColorPicker, ConfirmButton, Empty, ErrorBox, Field, inputCls, Modal, MoneyField,
-  PageHeader, ProgressBar,
+  Amount, Badge, Button, Callout, Card, ColorPicker, ConfirmButton, Empty, ErrorBox, Field, FormActions, IconButton,
+  IconTile, inputCls, Loading, Modal, MoneyField, PageHeader, ProgressBar, Select,
 } from '../components/ui';
 import { brl, centsToInput, formatDate, formatDay, parseMoney } from '../lib/format';
 
@@ -23,59 +34,77 @@ export function GoalsPage() {
       <PageHeader
         title="Caixinhas"
         subtitle={goals.data?.length ? `Você tem ${brl(total)} guardado em ${goals.data.length} caixinha(s).` : 'Separe dinheiro para seus objetivos.'}
-        actions={<Button onClick={() => setAction({ kind: 'edit' })}>+ Nova caixinha</Button>}
+        actions={
+          <Button icon={PlusIcon} onClick={() => setAction({ kind: 'edit' })}>
+            Nova caixinha
+          </Button>
+        }
       />
 
       <ErrorBox error={goals.error} />
 
       {goals.isLoading ? (
-        <p className="text-sm text-slate-500">Carregando…</p>
+        <Loading />
       ) : !goals.data?.length ? (
-        <Empty>Nenhuma caixinha ainda. Crie uma para sua viagem, reserva de emergência, um PC novo…</Empty>
+        <Empty icon={PiggyBankIcon}>Nenhuma caixinha ainda. Crie uma para sua viagem, reserva de emergência, um PC novo…</Empty>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
           {goals.data.map((g) => (
             <Card key={g.id}>
-              <div className="mb-3 flex items-start justify-between gap-2">
-                <div>
-                  <h2 className="font-semibold text-slate-900">{g.name}</h2>
-                  <p className="mt-0.5 text-xs text-slate-500">
-                    {g.deadline ? `Meta para ${formatDate(g.deadline)}` : 'Sem prazo definido'}
-                  </p>
+              <div className="flex items-start gap-3">
+                <IconTile icon={PiggyBankIcon} color={g.color} />
+                <div className="min-w-0 flex-1">
+                  <h2 className="truncate text-base font-medium">{g.name}</h2>
+                  <p className="text-xs text-muted">{g.deadline ? `Meta para ${formatDate(g.deadline)}` : 'Sem prazo definido'}</p>
                 </div>
-                <div className="flex items-center gap-2">
-                  {g.pace.reached && <Badge tone="green">Meta atingida 🎉</Badge>}
-                  {g.pace.overdue && <Badge tone="red">Prazo vencido</Badge>}
-                  <Button small variant="ghost" onClick={() => setAction({ kind: 'edit', goal: g })}>
-                    Editar
-                  </Button>
-                </div>
+                <IconButton label="Editar" icon={PencilSimpleIcon} onClick={() => setAction({ kind: 'edit', goal: g })} />
               </div>
 
-              <ProgressBar percent={g.percent} color={g.color} />
-              <div className="mt-2 flex justify-between text-sm">
-                <Amount text={brl(g.saved_cents)} tone="neutral" />
-                <span className="text-slate-500">
-                  de <span className="tabular">{brl(g.target_cents)}</span> · {g.percent}%
-                </span>
+              <div className="mt-4 mb-3 flex flex-wrap items-baseline gap-x-2">
+                <span className="text-2xl leading-8 font-medium tracking-[-0.025em] text-ink">{brl(g.saved_cents)}</span>
+                <span className="tabular text-sm text-muted">de {brl(g.target_cents)}</span>
+                <span className="tabular ml-auto text-sm font-medium text-ink">{g.percent}%</span>
               </div>
+              <ProgressBar percent={g.percent} color={g.color} label={`Caixinha ${g.name}`} />
+
+              {(g.pace.reached || g.pace.overdue) && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {g.pace.reached && (
+                    <Badge tone="green" icon={ConfettiIcon}>
+                      Meta atingida
+                    </Badge>
+                  )}
+                  {g.pace.overdue && (
+                    <Badge tone="red" icon={WarningCircleIcon}>
+                      Prazo vencido
+                    </Badge>
+                  )}
+                </div>
+              )}
 
               {!g.pace.reached && g.pace.per_month_cents !== null && (
-                <p className="mt-3 rounded-lg bg-indigo-50 px-3 py-2 text-xs text-indigo-800">
+                <Callout tone={g.pace.overdue ? 'danger' : 'info'} icon={g.pace.overdue ? undefined : CalendarCheckIcon} className="mt-4">
                   {g.pace.overdue
                     ? `Faltam ${brl(g.pace.remaining_cents)} e o prazo já passou.`
                     : `Guarde ${brl(g.pace.per_month_cents)} por mês (${g.pace.months_left} ${g.pace.months_left === 1 ? 'mês' : 'meses'}) para chegar lá.`}
-                </p>
+                </Callout>
               )}
 
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Button small onClick={() => setAction({ kind: 'deposit', goal: g })}>
+              <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-4">
+                <Button small variant="tonal" icon={ArrowDownIcon} onClick={() => setAction({ kind: 'deposit', goal: g })}>
                   Guardar
                 </Button>
-                <Button small variant="secondary" disabled={g.saved_cents === 0} onClick={() => setAction({ kind: 'withdraw', goal: g })}>
+                <Button small variant="secondary" icon={ArrowUpIcon} disabled={g.saved_cents === 0} onClick={() => setAction({ kind: 'withdraw', goal: g })}>
                   Resgatar
                 </Button>
-                <Button small variant="ghost" onClick={() => setHistoryOf(historyOf === g.id ? null : g.id)}>
+                <Button
+                  small
+                  variant="ghost"
+                  icon={ClockCounterClockwiseIcon}
+                  className="ml-auto"
+                  aria-expanded={historyOf === g.id}
+                  onClick={() => setHistoryOf(historyOf === g.id ? null : g.id)}
+                >
                   {historyOf === g.id ? 'Ocultar histórico' : 'Histórico'}
                 </Button>
               </div>
@@ -99,20 +128,22 @@ function History({ goalId }: { goalId: number }) {
   const undo = useApiMutation((id: number) => api.delete(`/goals/movements/${id}`));
 
   return (
-    <div className="mt-4 border-t border-slate-100 pt-3">
+    <div className="mt-4 rounded-xl bg-surface px-3 py-2">
       <ErrorBox error={movements.error ?? undo.error} />
       {!movements.data?.length ? (
-        <p className="text-xs text-slate-500">Nenhuma movimentação ainda.</p>
+        <p className="py-2 text-sm text-muted">Nenhuma movimentação ainda.</p>
       ) : (
-        <ul className="space-y-1.5">
+        <ul className="divide-y divide-line">
           {movements.data.map((m) => (
-            <li key={m.id} className="flex items-center gap-3 text-sm">
-              <span className="w-12 shrink-0 text-xs text-slate-400 tabular">{formatDay(m.date)}</span>
-              <span className="flex-1 truncate text-slate-600">
+            <li key={m.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-sm">
+              <span className="tabular w-11 shrink-0 text-xs text-muted">{formatDay(m.date)}</span>
+              <span className="min-w-40 flex-1 text-ink-2">
                 {m.amount_cents > 0 ? 'Guardado de' : 'Resgatado para'} {m.account_name}
-                {m.note && <span className="text-slate-400"> · {m.note}</span>}
+                {m.note && <span className="block text-xs text-muted">{m.note}</span>}
               </span>
-              <Amount text={`${m.amount_cents > 0 ? '+' : '−'} ${brl(Math.abs(m.amount_cents))}`} tone={m.amount_cents > 0 ? 'income' : 'expense'} />
+              <span className="ml-auto">
+                <Amount text={`${m.amount_cents > 0 ? '+' : '−'} ${brl(Math.abs(m.amount_cents))}`} tone={m.amount_cents > 0 ? 'income' : 'expense'} />
+              </span>
               <ConfirmButton label="Desfazer" onConfirm={() => undo.mutate(m.id)} />
             </li>
           ))}
@@ -152,19 +183,16 @@ function GoalFormModal({ goal, onClose }: { goal?: Goal; onClose: () => void }) 
           <input className={inputCls} type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
         </Field>
         <ColorPicker value={color} onChange={setColor} />
-        {goal && <p className="mb-3 text-xs text-slate-400">Excluir a caixinha devolve o valor guardado para as contas.</p>}
+        {goal && <p className="mb-3 text-xs text-muted">Excluir a caixinha devolve o valor guardado para as contas.</p>}
         <ErrorBox error={formError || save.error || remove.error} />
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <div>{goal && <ConfirmButton small={false} label="Excluir caixinha" onConfirm={() => remove.mutate(undefined, { onSuccess: onClose })} />}</div>
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={onClose}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={save.isPending}>
-              Salvar
-            </Button>
-          </div>
-        </div>
+        <FormActions danger={goal && <ConfirmButton small={false} label="Excluir caixinha" onConfirm={() => remove.mutate(undefined, { onSuccess: onClose })} />}>
+          <Button variant="secondary" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button type="submit" disabled={save.isPending}>
+            Salvar
+          </Button>
+        </FormActions>
       </form>
     </Modal>
   );
@@ -197,15 +225,16 @@ function MovementModal({ kind, goal, onClose }: { kind: 'deposit' | 'withdraw'; 
     <Modal title={`${deposit ? 'Guardar em' : 'Resgatar de'} ${goal.name}`} onClose={onClose}>
       <form onSubmit={submit}>
         <Field label={deposit ? 'Tirar da conta' : 'Devolver para a conta'}>
-          <select className={inputCls} value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+          <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
             {accounts.data?.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name} · saldo {brl(a.balance_cents)}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <MoneyField
+          large
           label="Valor"
           value={amount}
           onChange={setAmount}
@@ -219,14 +248,14 @@ function MovementModal({ kind, goal, onClose }: { kind: 'deposit' | 'withdraw'; 
           <input className={inputCls} value={note} maxLength={200} onChange={(e) => setNote(e.target.value)} />
         </Field>
         <ErrorBox error={formError || move.error} />
-        <div className="mt-2 flex justify-end gap-2">
+        <FormActions>
           <Button variant="secondary" onClick={onClose}>
             Cancelar
           </Button>
           <Button type="submit" disabled={move.isPending}>
             {deposit ? 'Guardar' : 'Resgatar'}
           </Button>
-        </div>
+        </FormActions>
       </form>
     </Modal>
   );
